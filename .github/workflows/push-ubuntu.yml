@@ -21,6 +21,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ubuntu
+  PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
   build-and-push:
@@ -74,9 +75,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./src/ubuntu
-          platforms: linux/amd64
           target: ${{ matrix.build_target.name }}
-          # platforms: linux/amd64,linux/arm64 # Hier werden die Zielplattformen angegeben
+          # platforms: linux/amd64
+          platforms: ${{ env.PLATFORMS }}
           push: ${{ github.event_name == 'push' || (github.event_name == 'create' && github.ref_type == 'tag') || github.event.inputs.push_image == 'true'}}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
