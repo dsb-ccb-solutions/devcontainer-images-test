@@ -11,7 +11,7 @@
 FROM ubuntu:24.04 AS base
 
 ARG \
-  DEVCONTAINER_VERSION=0.0.0
+  DEVCONTAINER_VERSION="unknown"
 ENV \
   LANG="C.UTF-8" 
 
@@ -86,7 +86,7 @@ RUN <<EOT
 # activate mise also for root
   echo 'eval "$(mise activate bash)"' >> /root/.bashrc
 # append version and build date to /etc/motd
-  env LANG="C.UTF-8" echo " devcontainer-ubuntu-base V${DEVCONTAINER_VERSION}, build `date +\"%Y-%m-%dT%H:%M:%S%z\"` " | sudo tee /etc/motd
+  env LANG="C.UTF-8" echo " devcontainer-ubuntu-base [${DEVCONTAINER_VERSION}], build `date +\"%Y-%m-%dT%H:%M:%S%z\"` " | sudo tee /etc/motd
   echo '' | sudo tee -a /etc/motd
 EOT
 
@@ -190,7 +190,7 @@ RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
 # list installed versions
     mise list
 # add version information to /etc/motd
-  env LANG="C.UTF-8" echo " devcontainer-ubuntu-ci V${DEVCONTAINER_VERSION}, build `date +\"%Y-%m-%dT%H:%M:%S%z\"` " | sudo tee /etc/motd
+  env LANG="C.UTF-8" echo " devcontainer-ubuntu-ci [${DEVCONTAINER_VERSION}], build `date +\"%Y-%m-%dT%H:%M:%S%z\"` " | sudo tee /etc/motd
   echo '' | sudo tee -a /etc/motd
 EOT
 
@@ -209,7 +209,7 @@ RUN <<EOT
     xterm xclip dbus-x11 \
     meld 
 # add version information to /etc/motd
-  echo " devcontainer-ubuntu-desktop V${DEVCONTAINER_VERSION}, build `date +\"%Y-%m-%dT%H:%M:%S%z\"` " | sudo tee /etc/motd
+  echo " devcontainer-ubuntu-desktop [${DEVCONTAINER_VERSION}], build `date +\"%Y-%m-%dT%H:%M:%S%z\"` " | sudo tee /etc/motd
   echo '' | sudo tee -a /etc/motd
 EOT
 #TODO: install DBeaver (Andi)

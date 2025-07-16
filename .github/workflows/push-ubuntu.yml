@@ -37,7 +37,8 @@ jobs:
     environment: build
     permissions:
       contents: read
-      packages: write # Erforderlich, um in das GitHub Container Registry zu schreiben
+      # allow this workflow to deploy container images/packages
+      packages: write
 
     steps:
       - name: Checkout repository
@@ -61,8 +62,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}${{ matrix.build_target.image_suffix }}
-          # tags for image
-          # - version + "latest" when worflow triggered via create tag event
+          # generate tags for image
+          # - version + "latest" when worflow was triggered via create tag event
           # - 'edge' for the last commit in the active branch
           # - (short) sha commit always
           tags: |
@@ -71,17 +72,48 @@ jobs:
             type=edge
             type=sha
 
+      - name: Determine build settings
+        id: determine_build_settings
+        run: |
+          # set defaults 
+          VERSION="${{ github.sha }}"
+          SHOULD_PUSH="false"
+
+          if [ -n "${{ steps.meta.outputs.version }}" ]; then
+            # if docker/metadata-action has already determined a version, use that instead of the commit sha
+            VERSION="${{ steps.meta.outputs.version }}"
+          fi
+          echo "Determined VERSION: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+          # Rules for pushing the image
+          # 1. Push to the main branch => push with 'edge' tag (and sha)
+          # 2. Creation of o version tag/release => push with version and 'latest' tag (and sha)
+          # 3. Manual workflow-dispatch => push only when requested
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]] || \
+             [[ "${{ github.event_name }}" == "create" && "${{ github.ref_type }}" == "tag" ]] || \
+             [[ "${{ github.event.inputs.push_image }}" == "true" ]] ; then
+            SHOULD_PUSH="true"
+          fi
+          echo "Determined SHOULD_PUSH: $SHOULD_PUSH"
+          echo "SHOULD_PUSH=$SHOULD_PUSH" >> $GITHUB_OUTPUT
+
+          # also print the generated tags, so we have all relevant information in one place
+          echo "Tags from docker/metadata-action: ${{ steps.meta.outputs.tags }}"
+
       - name: Build and push images
         uses: docker/build-push-action@v6
         with:
           context: ./src/ubuntu
           target: ${{ matrix.build_target.name }}
-          # platforms: linux/amd64
           platforms: ${{ env.PLATFORMS }}
-          push: ${{ github.event_name == 'push' || (github.event_name == 'create' && github.ref_type == 'tag') || github.event.inputs.push_image == 'true'}}
+          push: ${{ steps.determine_build_settings.outputs.SHOULD_PUSH }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           secrets: |
-            mise_github_token=${{ secrets.MISE_GITHUB_TOKEN }}
+            mise_github_token=${{ secrets.GITHUB_TOKEN }}
+          # add version to build args
+          build-args: |
+            DEVCONTAINER_VERSION=${{ steps.determine_build_settings.outputs.VERSION }}
