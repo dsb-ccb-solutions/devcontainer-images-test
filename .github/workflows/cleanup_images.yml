@@ -1,0 +1,29 @@
+name: Cleanup images pushed to ghcr
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Führt den Workflow jeden Sonntag um 03:00 Uhr UTC aus (ersetze durch deine gewünschte Zeit)
+    # Beachte: Für 'schedule' wird UTC verwendet. Passe die Zeit an deine Zeitzone an.
+    - cron: "0 3 * * 0"
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          packages: devcontainer-images-test/ubuntu,devcontainer-images-test/ubuntu-ci
+          delete-tags: sha*
+          exclude-tags: latest
+          older-than: 1 hour
+          delete-untagged: true
+          delete-ghost-images: true
+          delete-partial-images: true
+          delete-orphaned-images: true
+          validate: true
+          # dry-run: true
