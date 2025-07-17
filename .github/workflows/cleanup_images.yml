@@ -1,4 +1,4 @@
-name: Cleanup images pushed to ghcr
+name: Cleanup ghcr docker images
 
 on:
   workflow_dispatch:
@@ -14,10 +14,9 @@ on:
         type: boolean
         default: false
   schedule:
-    # Führt den Workflow jeden Sonntag um 03:00 Uhr UTC aus (ersetze durch deine gewünschte Zeit)
-    # Beachte: Für 'schedule' wird UTC verwendet. Passe die Zeit an deine Zeitzone an.
-    # - cron: "0 3 * * 0"
-    - cron: "*/5 * * * *" # every 5 minutes
+    # run this every Sunday at 03:00 UTC
+    - cron: "0 3 * * 0"
+    # - cron: "*/5 * * * *" # every 5 minutes (DEBUGGING)
 
 jobs:
   cleanup:
@@ -30,7 +29,7 @@ jobs:
       - name: Processing parameters
         id: parameters
         run: |
-          DRYRUN="false"
+          DRYRUN="true"
           FIXREPO="false"
           # Prüfen, ob der Workflow manuell ausgelöst wurde und das Flag gesetzt ist
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
@@ -48,6 +47,7 @@ jobs:
           echo "FIXREPO=$FIXREPO" >> $GITHUB_OUTPUT
 
       - name: Cleanup images
+        id: cleanup
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
           packages: devcontainer-images-test/ubuntu,devcontainer-images-test/ubuntu-ci
