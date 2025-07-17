@@ -1,0 +1,69 @@
+name: Cleanup images pushed to ghcr
+
+on:
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: "Dry-run?"
+        required: false
+        type: boolean
+        default: true
+      fixrepo:
+        description: "Fix repo?"
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    # Führt den Workflow jeden Sonntag um 03:00 Uhr UTC aus (ersetze durch deine gewünschte Zeit)
+    # Beachte: Für 'schedule' wird UTC verwendet. Passe die Zeit an deine Zeitzone an.
+    # - cron: "0 3 * * 0"
+    - cron: "*/5 * * * *" # every 5 minutes
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Processing parameters
+        id: parameters
+        run: |
+          DRYRUN="false"
+          FIXREPO="false"
+          # Prüfen, ob der Workflow manuell ausgelöst wurde und das Flag gesetzt ist
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Wenn der manuelle Input existiert und auf 'true' gesetzt ist
+            if [[ "${{ github.event.inputs.dryrun }}" == "true" ]]; then
+              DRYRUN="true"
+            fi
+            if [[ "${{ github.event.inputs.fixrepo }}" == "true" ]]; then
+              FIXREPO="true"
+            fi
+          fi
+          echo "Parameter DRYRUN: $DRYRUN"
+          echo "DRYRUN=$DRYRUN" >> $GITHUB_OUTPUT
+          echo "Parameter FIXREPO: $FIXREPO"
+          echo "FIXREPO=$FIXREPO" >> $GITHUB_OUTPUT
+
+      - name: Cleanup images
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          packages: devcontainer-images-test/ubuntu,devcontainer-images-test/ubuntu-ci
+          delete-tags: sha-*
+          exclude-tags: latest,edge,*.*.*
+          older-than: 7 days
+          delete-untagged: true
+          validate: true
+          dry-run: ${{ steps.parameters.outputs.DRYRUN == 'true'}}
+
+      - name: Fix repo (only when run manually)
+        if: ${{ steps.parameters.outputs.FIXREPO == 'true' }}
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          packages: devcontainer-images-test/ubuntu,devcontainer-images-test/ubuntu-ci
+          delete-ghost-images: true
+          delete-partial-images: true
+          delete-orphaned-images: true
+          dry-run: ${{ steps.parameters.outputs.DRYRUN == 'true'}}
