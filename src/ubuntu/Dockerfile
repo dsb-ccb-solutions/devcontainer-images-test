@@ -18,7 +18,7 @@ ENV \
 # set versions of installed packages =========================================
 
 # NodeJS
-ARG NODEJS_DEFAULT_RELEASE="22"
+ARG NODEJS_DEFAULT_RELEASE="22.17.1"
 ARG NODEJS_16_RELEASE="16.20.1"
 ARG NODEJS_18_RELEASE="18.16.0"
 ARG NODEJS_20_RELEASE="20.12.2"
@@ -85,6 +85,8 @@ RUN <<EOT
   echo 'Defaults env_keep += "ftp_proxy http_proxy https_proxy no_proxy "' >> /etc/sudoers.d/sudo_devcontainer
 # activate mise also for root
   echo 'eval "$(mise activate bash)"' >> /root/.bashrc
+# use mise shims for all non-interactive shells
+  echo 'eval "$(mise activate bash --shims)"' | sudo tee /etc/profile.d/mise.sh
 # append version and build date to /etc/motd
   env LANG="C.UTF-8" echo " devcontainer-ubuntu-base [${DEVCONTAINER_VERSION}], build `date +\"%Y-%m-%dT%H:%M:%S%z\"` " | sudo tee /etc/motd
   echo '' | sudo tee -a /etc/motd
@@ -102,14 +104,17 @@ RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
   export MISE_VERBOSE=true
   set -eux
 # install (and use) user-global packages
+  mise --version \
   mise use --global --yes \
     node@${NODEJS_DEFAULT_RELEASE} \
+    uv@latest \
     neovim@latest \
     starship@latest \
     lazygit@latest \
     delta@latest \
     task@latest
-  mise list
+  mise list 
+  mise cache clear --yes
 EOT
 
 # user: set up shell env
@@ -129,7 +134,6 @@ RUN <<EOT
   starship config username.show_always true
   starship config username.format '[$user]($style)@'
   starship config container.disabled true
-  echo 'eval "$(mise activate bash --shims)"' | sudo tee /etc/profile.d/mise.sh
 # bash shell
   echo 'eval "$(mise activate bash)"' >> /home/user/.bashrc
   echo 'eval "$(starship init bash)"' >> /home/user/.bashrc
@@ -147,7 +151,6 @@ ENV \
   LANGUAGE=de_DE.UTF-8 \
   LC_ALL=de_DE.UTF-8 \
   TZ=Europe/Berlin \
-  SHELL=/bin/fish \
   EDITOR=nvim \
   DOCKER_BUILDKIT=1
 
@@ -189,6 +192,7 @@ RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
     maven@${MAVEN_RELEASE}
 # list installed versions
     mise list
+    mise cache clear --yes
 # add version information to /etc/motd
   env LANG="C.UTF-8" echo " devcontainer-ubuntu-ci [${DEVCONTAINER_VERSION}], build `date +\"%Y-%m-%dT%H:%M:%S%z\"` " | sudo tee /etc/motd
   echo '' | sudo tee -a /etc/motd
