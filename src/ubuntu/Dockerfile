@@ -95,6 +95,7 @@ EOT
 # user context ===============================================================
 USER user
 WORKDIR /home/user
+COPY --chown=user:user config/ /home/user/.config/
 
 # user: install mise base tooling
 RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
