@@ -1,0 +1,76 @@
+version: "3"
+
+vars:
+  # To build for a single architecture, run for example:
+  # task build:ubuntu:base ARCHS=linux/amd64
+  # To pass the mise_github_token secret, set the env var MISE_GITHUB_TOKEN before running the build.
+  ARCHS: '{{.ARCHS | default "linux/amd64,linux/arm64"}}'
+  VERSION: '{{.VERSION | default "local"}}'
+
+tasks:
+  check:github-token:
+    desc: Ensure MISE_GITHUB_TOKEN is set
+    cmds:
+      - |
+        if [ -z "$MISE_GITHUB_TOKEN" ]; then
+          echo "\033[0;31mERROR: MISE_GITHUB_TOKEN is not set.\033[0m"
+          echo "Please set it with: export MISE_GITHUB_TOKEN=your_token_here"
+          exit 1
+        fi
+
+  build:ubuntu:base:
+    desc: Build the base Ubuntu devcontainer image (multi-arch, override ARCHS for single arch)
+    deps:
+      - check:github-token
+    cmds:
+      - |
+        docker buildx build \
+          --platform {{.ARCHS}} \
+          --build-arg DEVCONTAINER_VERSION={{.VERSION}} \
+          --secret id=mise_github_token,env=MISE_GITHUB_TOKEN \
+          -t devcontainer-ubuntu:{{.VERSION}} \
+          --target base \
+          --load \
+          ./src/ubuntu
+
+  build:ubuntu:ci:
+    desc: Build the CI Ubuntu devcontainer image (multi-arch, override ARCHS for single arch)
+    deps:
+      - check:github-token
+    cmds:
+      - |
+        docker buildx build \
+          --platform {{.ARCHS}} \
+          --build-arg DEVCONTAINER_VERSION={{.VERSION}} \
+          --secret id=mise_github_token,env=MISE_GITHUB_TOKEN \
+          -t devcontainer-ubuntu-ci:{{.VERSION}} \
+          --target ci \
+          --load \
+          ./src/ubuntu
+
+  build:ubuntu:coder:
+    desc: Build the coder Ubuntu devcontainer image (multi-arch, override ARCHS for single arch)
+    deps:
+      - check:github-token
+    cmds:
+      - |
+        docker buildx build \
+          --platform {{.ARCHS}} \
+          --build-arg DEVCONTAINER_VERSION={{.VERSION}} \
+          --secret id=mise_github_token,env=MISE_GITHUB_TOKEN \
+          -t devcontainer-ubuntu-coder:{{.VERSION}} \
+          --target coder \
+          --load \
+          ./src/ubuntu
+
+  build:ubuntu:all:
+    desc: Build all Ubuntu devcontainer images (base, ci, coder)
+    deps:
+      - build:ubuntu:base
+      - build:ubuntu:ci
+      - build:ubuntu:coder
+
+  default:
+    desc: Build all Ubuntu devcontainer images (default)
+    cmds:
+      - task: build:ubuntu:all
