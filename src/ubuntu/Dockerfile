@@ -38,8 +38,10 @@ ARG ANSIBLE_RELEASE="9.13.0"
 # Docker
 ARG DOCKERCLI_RELEASE="28"
 
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+
+# hadolint ignore=DL3008
 RUN <<EOT
-  set -eux
   export DEBIAN_FRONTEND=noninteractive
 # restore manpages
 # yes | unminimize 2>&1
@@ -72,8 +74,8 @@ RUN <<EOT
 EOT
 
 # Set up system ==============================================================
+# hadolint ignore=SC2016
 RUN <<EOT
-  set -eux
 # try to remove ubuntu user (if present)
   userdel --force --remove ubuntu || true
 # create user and group
@@ -83,13 +85,21 @@ RUN <<EOT
   echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/sudo_devcontainer
 # keep some env vars after sudo
   echo 'Defaults env_keep += "ftp_proxy http_proxy https_proxy no_proxy "' >> /etc/sudoers.d/sudo_devcontainer
+  chmod 440 /etc/sudoers.d/sudo_devcontainer
 # activate mise also for root
   echo 'eval "$(mise activate bash)"' >> /root/.bashrc
+# git system-wide configuration
+  git config --system advice.detachedHead false
+  git config --system init.defaultBranch master
+  git config --system core.autocrlf input
+  git config --system core.safecrlf warn
 # use mise shims for all non-interactive shells
-  echo 'eval "$(mise activate bash --shims)"' | sudo tee /etc/profile.d/mise.sh
+  echo 'eval "$(mise activate bash --shims)"' > /etc/profile.d/mise.sh
+  chmod 644 /etc/profile.d/mise.sh
 # append version and build date to /etc/motd
-  env LANG="C.UTF-8" echo " devcontainer-ubuntu-base [${DEVCONTAINER_VERSION}], build `date +\"%Y-%m-%dT%H:%M:%S%z\"` " | sudo tee /etc/motd
-  echo '' | sudo tee -a /etc/motd
+ cat > /etc/motd <<EOF
+ devcontainer-ubuntu-base [${DEVCONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
+EOF
 EOT
 
 # user context ===============================================================
@@ -103,7 +113,6 @@ RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
   export MISE_GITHUB_TOKEN=$(cat /run/secrets/mise_github_token)
   eval "$(mise activate bash)"
   export MISE_VERBOSE=true
-  set -eux
 # install (and use) user-global packages
   mise --version \
   mise use --global --yes \
@@ -122,12 +131,11 @@ EOT
 RUN <<EOT
 #!/usr/bin/env /usr/bin/bash
   eval "$(mise activate bash)"
-  set -eux
-# git
-  sudo git config --system advice.detachedHead false
-  sudo git config --system init.defaultBranch master
-  sudo git config --system core.autocrlf input
-  sudo git config --system core.safecrlf warn
+# user-global git configuration
+  git config --global core.pager delta
+  git config --global interactive.diffFilter 'delta --color-only'
+  git config --global delta.navigate true
+  git config --global merge.conflictStyle zdiff3
 # starship prompt (https://starship.rs)
   starship config add_newline true
   starship config command_timeout 2000
@@ -155,17 +163,31 @@ ENV \
   EDITOR=nvim \
   DOCKER_BUILDKIT=1
 
+# use mise shims in path, interactive shells with activated mise will change this
+ENV PATH=/home/user/.local/share/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
 # Mount for docker-in-docker 
 VOLUME [ "/var/lib/docker" ]
 
-CMD ["/usr/bin/bash"]
-# CMD [ "sleep", "infinity" ]
+CMD [ "sleep", "infinity" ]
 
 # ============================================================================
 # CI
 # ============================================================================
 FROM base AS ci
 
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+
+USER root
+RUN <<EOT
+# append version and build date to /etc/motd
+  cat > /etc/motd <<EOF
+  devcontainer-ubuntu-ci [${DEVCONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
+EOF
+EOT
+
+USER user
+# hadolint ignore=DL3004
 RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
 #!/usr/bin/env /usr/bin/bash
   eval "$(mise activate bash)"
@@ -194,29 +216,37 @@ RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
 # list installed versions
     mise list
     mise cache clear --yes
-# add version information to /etc/motd
-  env LANG="C.UTF-8" echo " devcontainer-ubuntu-ci [${DEVCONTAINER_VERSION}], build `date +\"%Y-%m-%dT%H:%M:%S%z\"` " | sudo tee /etc/motd
-  echo '' | sudo tee -a /etc/motd
 EOT
 
 # ============================================================================
 # CODER
 # ============================================================================
 FROM base AS coder
-# install base xfce4 desktop and tools
+
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+
+USER root
+# hadolint ignore=DL3008
 RUN <<EOT
 #!/usr/bin/env /usr/bin/bash
-  eval "$(mise activate bash)"
-  set -eux
+# append version and build date to /etc/motd
+ cat > /etc/motd <<EOF
+ devcontainer-ubuntu-coder [${DEVCONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
+EOF
 # install desktop base system and tools
-  sudo apt-get update && sudo apt-get install -y --no-install-recommends \
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-terminal \
     xterm xclip dbus-x11 \
     meld 
-# add version information to /etc/motd
-  echo " devcontainer-ubuntu-desktop [${DEVCONTAINER_VERSION}], build `date +\"%Y-%m-%dT%H:%M:%S%z\"` " | sudo tee /etc/motd
-  echo '' | sudo tee -a /etc/motd
+# clean up after package installation
+  apt-get autoremove -y
+  apt-get clean -y
+  rm -rf /var/lib/apt/lists/*
 EOT
+
+USER user
+
 #TODO: install DBeaver (Andi)
 #TODO: install kasmvnc
 #TODO: install eclipse+lombok
