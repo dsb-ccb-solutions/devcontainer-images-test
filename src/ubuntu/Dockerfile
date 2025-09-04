@@ -38,6 +38,10 @@ ARG ANSIBLE_RELEASE="9.13.0"
 # Docker
 ARG DOCKERCLI_RELEASE="28"
 
+# GUI tools
+ARG KASMVNC_RELEASE="1.3.4"
+ARG DBEAVER_RELEASE="25.1.4"
+
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
 # hadolint ignore=DL3008
@@ -163,7 +167,7 @@ ENV \
   EDITOR=nvim \
   DOCKER_BUILDKIT=1
 
-# use mise shims in path, interactive shells with activated mise will change this
+# use mise shims in path, interactive shells with activated mise will override this
 ENV PATH=/home/user/.local/share/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Mount for docker-in-docker 
@@ -198,6 +202,7 @@ RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
   mise use --global --yes \
     awscli@${AWSCLI_RELEASE} \
     aws-vault@${AWSVAULT_RELEASE} \
+    java@${JAVA_DEFAULT_RELEASE} \
     python@3.12 \
     pipx@1.7.1 \
     ansible@${ANSIBLE_RELEASE} \
@@ -209,7 +214,6 @@ RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
     node@${NODEJS_18_RELEASE} \
     node@${NODEJS_20_RELEASE} \
     pnpm@${PNPM_RELEASE} \
-    java@${JAVA_DEFAULT_RELEASE} \
     java@${JAVA_17_RELEASE} \
     java@${JAVA_21_RELEASE} \
     maven@${MAVEN_RELEASE}
@@ -218,14 +222,19 @@ RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
     mise cache clear --yes
 EOT
 
+CMD [ "sleep", "infinity" ]
+
 # ============================================================================
 # CODER
 # ============================================================================
-FROM base AS coder
+#TODO start off of base or ci?
+FROM ci AS coder
 
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
 USER root
+WORKDIR /tmp
+
 # hadolint ignore=DL3008
 RUN <<EOT
 #!/usr/bin/env /usr/bin/bash
@@ -236,19 +245,69 @@ EOF
 # install desktop base system and tools
   export DEBIAN_FRONTEND=noninteractive
   apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
     xfce4 xfce4-terminal \
     xterm xclip dbus-x11 \
-    meld 
-# clean up after package installation
+    lsb-release \
+    meld
+# install kasm
+  wget --progress=dot:giga https://github.com/kasmtech/KasmVNC/releases/download/v${KASMVNC_RELEASE}/kasmvncserver_$(lsb_release -sc)_${KASMVNC_RELEASE}_$(dpkg --print-architecture).deb;
+  apt install -y ./kasmvncserver_*.deb;
+  rm kasmvncserver_*.deb
+# add user to ssl-certs group
+  usermod -aG ssl-cert user
+# clean up after package installations
   apt-get autoremove -y
   apt-get clean -y
   rm -rf /var/lib/apt/lists/*
 EOT
 
-USER user
+RUN <<EOT
+# install Firefox from PPA (Mozilla Team)
+  add-apt-repository ppa:mozillateam/ppa
+  cat > /etc/apt/preferences.d/mozilla-firefox <<EOF
+Package: firefox*
+Pin: release o=LP-PPA-mozillateam
+Pin-Priority: 1001
+EOF
+apt-get update && apt-get install -y --no-install-recommends firefox 
+EOT
 
-#TODO: install DBeaver (Andi)
-#TODO: install kasmvnc
+RUN <<EOT
+# install DBeaver from .tar.gz archive (DBeaver PPA is broken)
+  case $(dpkg --print-architecture) in
+    amd64|x86_64) DOWNLOAD_URL="https://github.com/dbeaver/dbeaver/releases/download/${DBEAVER_RELEASE}/dbeaver-ce-${DBEAVER_RELEASE}-linux.gtk.x86_64-nojdk.tar.gz" ;;
+    arm64|aarch64) DOWNLOAD_URL="https://github.com/dbeaver/dbeaver/releases/download/${DBEAVER_RELEASE}/dbeaver-ce-${DBEAVER_RELEASE}-linux.gtk.aarch64-nojdk.tar.gz" ;;
+    *) echo "Unsupported architecture: $(dpkg --print-architecture)" && exit 1 ;;
+  esac
+  wget --progress=dot:giga -O dbeaver.tar.gz "${DOWNLOAD_URL}"
+  tar -xzf /tmp/dbeaver.tar.gz -C /usr/share
+  mv /usr/share/dbeaver /usr/share/dbeaver-ce
+  cp /usr/share/dbeaver-ce/dbeaver-ce.desktop /usr/share/applications/
+#
+EOT
+
+USER user
+WORKDIR /home/user
+
+RUN <<EOT
+# preparare kasmvnc config for user
+  mkdir -p /home/user/.vnc
+  cat > /home/user/.vnc/kasmvnc.yaml <<EOF
+network:
+  protocol: http
+  ssl:
+    require_ssl: false
+  udp:
+    public_ip: 127.0.0.1
+logging:
+  log_writer_name: all
+  log_dest: logfile
+  level: 100
+EOF
+EOT
+
+CMD [ "sleep", "infinity" ]
+
 #TODO: install eclipse+lombok
-#TODO: install vscode (gui)
 
