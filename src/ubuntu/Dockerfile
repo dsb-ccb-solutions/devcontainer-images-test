@@ -84,7 +84,7 @@ RUN <<EOT
   userdel --force --remove ubuntu || true
 # create user and group
   groupadd devs 
-  useradd --create-home --groups devs,sudo --shell /bin/bash user --uid 1000;
+  useradd --create-home --groups devs,sudo --shell /bin/bash user --uid 1001;
 # sudo without password
   echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/sudo_devcontainer
 # keep some env vars after sudo
