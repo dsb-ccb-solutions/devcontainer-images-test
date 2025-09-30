@@ -12,6 +12,11 @@ on:
       - "v*.*.*"
   workflow_dispatch:
     inputs:
+      platforms:
+        description: "Which platforms to build?"
+        required: false
+        type: string
+        default: "linux/amd64,linux/arm64"
       push_image:
         description: "Push image after build?"
         required: false
@@ -100,6 +105,11 @@ jobs:
 
           # also print the generated tags, so we have all relevant information in one place
           echo "Tags from docker/metadata-action: ${{ steps.meta.outputs.tags }}"
+
+          # which image platform should be built
+          if [ -n "${{ github.event.inputs.platforms }}" ]; then
+            echo "PLATFORMS=${{ github.event.inputs.platforms }}" >> $GITHUB_ENV
+          fi
 
       - name: Build and push images
         uses: docker/build-push-action@v6
