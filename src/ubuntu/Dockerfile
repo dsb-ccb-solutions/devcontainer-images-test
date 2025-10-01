@@ -84,7 +84,7 @@ RUN <<EOT
   userdel --force --remove ubuntu || true
 # create user and group
   groupadd devs 
-  useradd --create-home --groups devs,sudo --shell /bin/bash user --uid 1001;
+  useradd --create-home --groups devs,sudo --shell /bin/bash user --uid 1000;
 # sudo without password
   echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/sudo_devcontainer
 # keep some env vars after sudo
@@ -188,39 +188,45 @@ RUN <<EOT
   cat > /etc/motd <<EOF
   devcontainer-ubuntu-ci [${DEVCONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
 EOF
+# add specific runner user for github-actions (must have UID 1001!)
+  useradd --create-home --groups devs,sudo --shell /bin/bash runner --uid 1001;
 EOT
 
-USER user
-# hadolint ignore=DL3004
-RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
-#!/usr/bin/env /usr/bin/bash
-  eval "$(mise activate bash)"
-  export MISE_VERBOSE=true
-  set -eux
+# reset PATH
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# install user-global
-  mise use --global --yes \
-    awscli@${AWSCLI_RELEASE} \
-    aws-vault@${AWSVAULT_RELEASE} \
-    java@${JAVA_DEFAULT_RELEASE} \
-    python@3.12 \
-    pipx@1.7.1 \
-    ansible@${ANSIBLE_RELEASE} \
-    docker-cli@${DOCKERCLI_RELEASE} \
-    pipx:awslogs@latest
-# install other frequently used versions
-  mise install --yes \
-    node@${NODEJS_16_RELEASE} \
-    node@${NODEJS_18_RELEASE} \
-    node@${NODEJS_20_RELEASE} \
-    pnpm@${PNPM_RELEASE} \
-    java@${JAVA_17_RELEASE} \
-    java@${JAVA_21_RELEASE} \
-    maven@${MAVEN_RELEASE}
-# list installed versions
-    mise list
-    mise cache clear --yes
-EOT
+USER runner
+
+# # hadolint ignore=DL3004
+# RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
+# #!/usr/bin/env /usr/bin/bash
+#   eval "$(mise activate bash)"
+#   export MISE_VERBOSE=true
+#   set -eux
+#
+# # install user-global
+#   mise use --global --yes \
+#     awscli@${AWSCLI_RELEASE} \
+#     aws-vault@${AWSVAULT_RELEASE} \
+#     java@${JAVA_DEFAULT_RELEASE} \
+#     python@3.12 \
+#     pipx@1.7.1 \
+#     ansible@${ANSIBLE_RELEASE} \
+#     docker-cli@${DOCKERCLI_RELEASE} \
+#     pipx:awslogs@latest
+# # install other frequently used versions
+#   mise install --yes \
+#     node@${NODEJS_16_RELEASE} \
+#     node@${NODEJS_18_RELEASE} \
+#     node@${NODEJS_20_RELEASE} \
+#     pnpm@${PNPM_RELEASE} \
+#     java@${JAVA_17_RELEASE} \
+#     java@${JAVA_21_RELEASE} \
+#     maven@${MAVEN_RELEASE}
+# # list installed versions
+#     mise list
+#     mise cache clear --yes
+# EOT
 
 CMD [ "sleep", "infinity" ]
 
