@@ -56,6 +56,7 @@ tasks:
       - |
         docker buildx build \
           --platform {{.ARCHS}} \
+          --progress=plain \
           --build-arg DEVCONTAINER_VERSION={{.VERSION}} \
           --secret id=mise_github_token,env=MISE_GITHUB_TOKEN \
           -t devcontainer-ubuntu-coder:{{.VERSION}} \

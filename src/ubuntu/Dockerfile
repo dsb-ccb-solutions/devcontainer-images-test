@@ -54,7 +54,7 @@ RUN <<EOT
     ca-certificates curl wget \
     dialog gnupg sq \
     tzdata locales-all \
-    procps apt-utils net-tools iputils-ping
+    procps apt-utils net-tools iputils-ping lsb-release
 # switch to https repos
   sed -i '/^[[:space:]]*#/!s/http/https/g' /etc/apt/sources.list.d/ubuntu.sources
 # add additional repos
@@ -94,7 +94,7 @@ RUN <<EOT
   echo 'eval "$(mise activate bash)"' >> /root/.bashrc
 # git system-wide configuration
   git config --system advice.detachedHead false
-  git config --system init.defaultBranch master
+  git config --system init.defaultBranch main
   git config --system core.autocrlf input
   git config --system core.safecrlf warn
 # use mise shims for all non-interactive shells
@@ -188,7 +188,17 @@ RUN <<EOT
   cat > /etc/motd <<EOF
   devcontainer-ubuntu-ci [${DEVCONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
 EOF
+  export DEBIAN_FRONTEND=noninteractive
+# install docker-ce-cli (needed to build images in ci pipelines)
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+    $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  apt-get update && apt-get install -y --no-install-recommends \
+    docker-ce-cli
 # add specific runner user for github-actions (must have UID 1001!)
+# we do not need to do any special customizations for this user, 
+# because it's home directory will get overridden by the github runner anyways
   useradd --create-home --groups devs,sudo --shell /bin/bash runner --uid 1001;
 EOT
 
