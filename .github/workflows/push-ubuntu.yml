@@ -32,7 +32,7 @@ jobs:
       fail-fast: true
       matrix:
         build_target:
-          - { name: "base", image_suffix: "" }
+          - { name: "devcontainer", image_suffix: "" }
           - { name: "ci", image_suffix: "-ci" }
           # - { name: "coder", image_suffix: "-coder" }
     runs-on: ubuntu-latest
@@ -123,4 +123,4 @@ jobs:
             mise_github_token=${{ secrets.GITHUB_TOKEN }}
           # add version to build args
           build-args: |
-            DEVCONTAINER_VERSION=${{ steps.determine_build_settings.outputs.VERSION }}
+            CONTAINER_VERSION=${{ steps.determine_build_settings.outputs.VERSION }}

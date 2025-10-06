@@ -11,7 +11,7 @@
 FROM ubuntu:24.04 AS base
 
 ARG \
-  DEVCONTAINER_VERSION="unknown"
+  CONTAINER_VERSION="unknown"
 ENV \
   LANG="C.UTF-8" 
 
@@ -19,24 +19,6 @@ ENV \
 
 # NodeJS
 ARG NODEJS_DEFAULT_RELEASE="22.17.1"
-ARG NODEJS_16_RELEASE="16.20.1"
-ARG NODEJS_18_RELEASE="18.16.0"
-ARG NODEJS_20_RELEASE="20.12.2"
-ARG PNPM_RELEASE="9.0.6"
-
-# Java
-ARG JAVA_DEFAULT_RELEASE="zulu-23.32.11"
-ARG JAVA_17_RELEASE="zulu-17.42.19"
-ARG JAVA_21_RELEASE="zulu-21.42.19"
-ARG MAVEN_RELEASE="3.9"
-
-# AWS
-ARG AWSCLI_RELEASE="2.13.26"
-ARG AWSVAULT_RELEASE="7.2.0"
-ARG ANSIBLE_RELEASE="9.13.0"
-
-# Docker
-ARG DOCKERCLI_RELEASE="28"
 
 # GUI tools
 ARG KASMVNC_RELEASE="1.3.4"
@@ -47,8 +29,6 @@ SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 # hadolint ignore=DL3008
 RUN <<EOT
   export DEBIAN_FRONTEND=noninteractive
-# restore manpages
-# yes | unminimize 2>&1
 # install minimal base packages
   apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget \
@@ -60,9 +40,10 @@ RUN <<EOT
 # add additional repos
   install -dm 755 /etc/apt/keyrings
 #  mise (https://mise.jdx.dev)
-  wget -qO - https://mise.jdx.dev/gpg-key.pub | gpg --dearmor | tee /etc/apt/keyrings/mise-archive-keyring.gpg 1> /dev/null
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.jdx.dev/deb stable main" | tee /etc/apt/sources.list.d/mise.list;
-# install dev tooling
+  # wget -qO - https://mise.jdx.dev/gpg-key.pub | gpg --dearmor | tee /etc/apt/keyrings/mise-archive-keyring.gpg 1> /dev/null
+  curl -fsSL https://mise.jdx.dev/gpg-key.pub | gpg --dearmor -o /etc/apt/keyrings/mise-archive-keyring.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.jdx.dev/deb stable main" | tee /etc/apt/sources.list.d/mise.list > /dev/null
+# install base tooling
   apt-get update && apt-get install -y --no-install-recommends \
     mise \
     build-essential \
@@ -83,13 +64,13 @@ RUN <<EOT
 # try to remove ubuntu user (if present)
   userdel --force --remove ubuntu || true
 # create user and group
-  groupadd devs 
+  groupadd devs --gid 2000
   useradd --create-home --groups devs,sudo --shell /bin/bash user --uid 1000;
 # sudo without password
-  echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/sudo_devcontainer
+  echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/sudo_group
 # keep some env vars after sudo
-  echo 'Defaults env_keep += "ftp_proxy http_proxy https_proxy no_proxy "' >> /etc/sudoers.d/sudo_devcontainer
-  chmod 440 /etc/sudoers.d/sudo_devcontainer
+  echo 'Defaults env_keep += "ftp_proxy http_proxy https_proxy no_proxy "' >> /etc/sudoers.d/sudo_group
+  chmod 440 /etc/sudoers.d/sudo_group
 # activate mise also for root
   echo 'eval "$(mise activate bash)"' >> /root/.bashrc
 # git system-wide configuration
@@ -100,9 +81,21 @@ RUN <<EOT
 # use mise shims for all non-interactive shells
   echo 'eval "$(mise activate bash --shims)"' > /etc/profile.d/mise.sh
   chmod 644 /etc/profile.d/mise.sh
+EOT
+
+# ============================================================================
+# devcontainer
+# ============================================================================
+FROM base AS devcontainer
+
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+
+RUN <<EOT
+# restore manpages
+# yes | unminimize 2>&1
 # append version and build date to /etc/motd
  cat > /etc/motd <<EOF
- devcontainer-ubuntu-base [${DEVCONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
+ devcontainer-ubuntu [${CONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
 EOF
 EOT
 
@@ -125,6 +118,7 @@ RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
     neovim@latest \
     starship@latest \
     lazygit@latest \
+    github-cli@latest \
     delta@latest \
     task@latest
   mise list 
@@ -176,17 +170,16 @@ VOLUME [ "/var/lib/docker" ]
 CMD [ "sleep", "infinity" ]
 
 # ============================================================================
-# CI
+# ci
 # ============================================================================
 FROM base AS ci
 
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
-USER root
 RUN <<EOT
 # append version and build date to /etc/motd
   cat > /etc/motd <<EOF
-  devcontainer-ubuntu-ci [${DEVCONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
+  ci-ubuntu [${CONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
 EOF
   export DEBIAN_FRONTEND=noninteractive
 # install docker-ce-cli (needed to build images in ci pipelines)
@@ -196,47 +189,17 @@ EOF
     $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
   apt-get update && apt-get install -y --no-install-recommends \
     docker-ce-cli
-# add specific runner user for github-actions (must have UID 1001!)
+# add specific ghrunner user for github-actions (must have UID 1001!)
 # we do not need to do any special customizations for this user, 
 # because it's home directory will get overridden by the github runner anyways
-  useradd --create-home --groups devs,sudo --shell /bin/bash runner --uid 1001;
+  useradd --create-home --home /github/home --groups devs,sudo --shell /bin/bash ghrunner --uid 1001;
+# clean up after package installations
+  apt-get autoremove -y
+  apt-get clean -y
+  rm -rf /var/lib/apt/lists/*
 EOT
 
-# reset PATH
-ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-USER runner
-
-# # hadolint ignore=DL3004
-# RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
-# #!/usr/bin/env /usr/bin/bash
-#   eval "$(mise activate bash)"
-#   export MISE_VERBOSE=true
-#   set -eux
-#
-# # install user-global
-#   mise use --global --yes \
-#     awscli@${AWSCLI_RELEASE} \
-#     aws-vault@${AWSVAULT_RELEASE} \
-#     java@${JAVA_DEFAULT_RELEASE} \
-#     python@3.12 \
-#     pipx@1.7.1 \
-#     ansible@${ANSIBLE_RELEASE} \
-#     docker-cli@${DOCKERCLI_RELEASE} \
-#     pipx:awslogs@latest
-# # install other frequently used versions
-#   mise install --yes \
-#     node@${NODEJS_16_RELEASE} \
-#     node@${NODEJS_18_RELEASE} \
-#     node@${NODEJS_20_RELEASE} \
-#     pnpm@${PNPM_RELEASE} \
-#     java@${JAVA_17_RELEASE} \
-#     java@${JAVA_21_RELEASE} \
-#     maven@${MAVEN_RELEASE}
-# # list installed versions
-#     mise list
-#     mise cache clear --yes
-# EOT
+USER ghrunner
 
 CMD [ "sleep", "infinity" ]
 
@@ -244,7 +207,7 @@ CMD [ "sleep", "infinity" ]
 # CODER
 # ============================================================================
 #TODO start off of base or ci?
-FROM ci AS coder
+FROM devcontainer AS coder
 
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
@@ -256,7 +219,7 @@ RUN <<EOT
 #!/usr/bin/env /usr/bin/bash
 # append version and build date to /etc/motd
  cat > /etc/motd <<EOF
- devcontainer-ubuntu-coder [${DEVCONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
+ coder-ubuntu [${CONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
 EOF
 # install desktop base system and tools
   export DEBIAN_FRONTEND=noninteractive
@@ -287,6 +250,10 @@ Pin: release o=LP-PPA-mozillateam
 Pin-Priority: 1001
 EOF
 apt-get update && apt-get install -y --no-install-recommends firefox 
+# clean up after package installations
+  apt-get autoremove -y
+  apt-get clean -y
+  rm -rf /var/lib/apt/lists/*
 EOT
 
 RUN <<EOT
