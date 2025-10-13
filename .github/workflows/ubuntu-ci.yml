@@ -1,4 +1,4 @@
-name: Ubuntu (devcontainer, ci, coder)
+name: Ubuntu CI (devcontainer, ci, coder)
 
 on:
   pull_request:

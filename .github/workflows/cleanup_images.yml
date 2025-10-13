@@ -16,7 +16,6 @@ on:
   schedule:
     # run this every Sunday at 03:00 UTC
     - cron: "0 3 * * 0"
-    # - cron: "*/5 * * * *" # every 5 minutes (DEBUGGING)
 
 jobs:
   cleanup:
@@ -33,9 +32,9 @@ jobs:
           FIXREPO="false"
           # Prüfen, ob der Workflow manuell ausgelöst wurde und das Flag gesetzt ist
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # Wenn der manuelle Input existiert und auf 'true' gesetzt ist
-            if [[ "${{ github.event.inputs.dryrun }}" == "true" ]]; then
-              DRYRUN="true"
+            # Wenn der manuelle Input existiert und auf 'false' gesetzt ist
+            if [[ "${{ github.event.inputs.dryrun }}" == "false" ]]; then
+              DRYRUN="false"
             fi
             if [[ "${{ github.event.inputs.fixrepo }}" == "true" ]]; then
               FIXREPO="true"
