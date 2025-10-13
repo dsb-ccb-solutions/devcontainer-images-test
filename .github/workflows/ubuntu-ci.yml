@@ -1,4 +1,4 @@
-name: Build and Push ubuntu images
+name: Ubuntu (devcontainer, ci, coder)
 
 on:
   pull_request:
