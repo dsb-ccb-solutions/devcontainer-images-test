@@ -27,15 +27,14 @@ env:
 
 jobs:
   build-and-push:
-    name: Build and push images
     strategy:
       fail-fast: true
       matrix:
         build_target:
           - { name: "devcontainer", image_suffix: "" }
           - { name: "ci", image_suffix: "-ci" }
-          # - { name: "coder", image_suffix: "-coder" }
     runs-on: ubuntu-latest
+    name: ${{matrix.build_target.name}} image
     environment: build
     permissions:
       contents: read

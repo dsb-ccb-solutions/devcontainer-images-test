@@ -1,9 +1,5 @@
-# https://github.com/devcontainers/images
-# https://github.com/devcontainers/features/tree/main/src/docker-in-docker
-# base image for all devcontainers: https://github.com/docker-library/buildpack-deps
-
-# use buildx syntax definition to use secrets
 # syntax=docker/dockerfile:1.7-labs
+# use buildx syntax definition to use secrets
 
 # ============================================================================
 # base
@@ -18,11 +14,11 @@ ENV \
 # set versions of installed packages =========================================
 
 # NodeJS
-ARG NODEJS_DEFAULT_RELEASE="22.17.1"
+# ARG NODEJS_DEFAULT_RELEASE="22.17.1"
 
 # GUI tools
-ARG KASMVNC_RELEASE="1.3.4"
-ARG DBEAVER_RELEASE="25.1.4"
+# ARG KASMVNC_RELEASE="1.3.4"
+# ARG DBEAVER_RELEASE="26.2.2"
 
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
@@ -92,7 +88,7 @@ SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
 RUN <<EOT
 # restore manpages
-# yes | unminimize 2>&1
+yes | unminimize 2>&1
 # append version and build date to /etc/motd
  cat > /etc/motd <<EOF
  devcontainer-ubuntu [${CONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
@@ -113,7 +109,7 @@ RUN --mount=type=secret,id=mise_github_token,uid=1000 <<EOT
 # install (and use) user-global packages
   mise --version \
   mise use --global --yes \
-    node@${NODEJS_DEFAULT_RELEASE} \
+    node@$lts \
     uv@latest \
     neovim@latest \
     starship@latest \
@@ -134,6 +130,13 @@ RUN <<EOT
   git config --global interactive.diffFilter 'delta --color-only'
   git config --global delta.navigate true
   git config --global merge.conflictStyle zdiff3
+# user-global git aliases
+  git config --global alias.co "checkout"
+  git config --global alias.lg "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative"
+  git config --global alias.pcb "push -u origin HEAD"
+  git config --global alias.undo-last-commit "reset --soft HEAD^"
+  git config --global alias.up '!git remote update -p; git merge --ff-only @{u}'
+  git config --global alias.uprebase "rebase --rebase-merges @{u}"
 # starship prompt (https://starship.rs)
   starship config add_newline true
   starship config command_timeout 2000
@@ -176,6 +179,7 @@ FROM base AS ci
 
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
+# hadolint ignore=DL3008
 RUN <<EOT
 # append version and build date to /etc/motd
   cat > /etc/motd <<EOF
@@ -184,14 +188,12 @@ EOF
   export DEBIAN_FRONTEND=noninteractive
 # install docker-ce-cli (needed to build images in ci pipelines)
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-  echo \
-    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-    $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
   apt-get update && apt-get install -y --no-install-recommends \
     docker-ce-cli
 # add specific ghrunner user for github-actions (must have UID 1001!)
 # we do not need to do any special customizations for this user, 
-# because it's home directory will get overridden by the github runner anyways
+# because the home directory will get overridden by the github runner anyways
   useradd --create-home --home /github/home --groups devs,sudo --shell /bin/bash ghrunner --uid 1001;
 # clean up after package installations
   apt-get autoremove -y
@@ -202,95 +204,4 @@ EOT
 USER ghrunner
 
 CMD [ "sleep", "infinity" ]
-
-# ============================================================================
-# CODER
-# ============================================================================
-#TODO start off of base or ci?
-FROM devcontainer AS coder
-
-SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
-
-USER root
-WORKDIR /tmp
-
-# hadolint ignore=DL3008
-RUN <<EOT
-#!/usr/bin/env /usr/bin/bash
-# append version and build date to /etc/motd
- cat > /etc/motd <<EOF
- coder-ubuntu [${CONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)
-EOF
-# install desktop base system and tools
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update && apt-get install -y --no-install-recommends \
-    software-properties-common \
-    xfce4 xfce4-terminal \
-    xterm xclip dbus-x11 \
-    lsb-release \
-    meld
-# install kasm
-  wget --progress=dot:giga https://github.com/kasmtech/KasmVNC/releases/download/v${KASMVNC_RELEASE}/kasmvncserver_$(lsb_release -sc)_${KASMVNC_RELEASE}_$(dpkg --print-architecture).deb;
-  apt install -y ./kasmvncserver_*.deb;
-  rm kasmvncserver_*.deb
-# add user to ssl-certs group
-  usermod -aG ssl-cert user
-# clean up after package installations
-  apt-get autoremove -y
-  apt-get clean -y
-  rm -rf /var/lib/apt/lists/*
-EOT
-
-RUN <<EOT
-# install Firefox from PPA (Mozilla Team)
-  add-apt-repository ppa:mozillateam/ppa
-  cat > /etc/apt/preferences.d/mozilla-firefox <<EOF
-Package: firefox*
-Pin: release o=LP-PPA-mozillateam
-Pin-Priority: 1001
-EOF
-apt-get update && apt-get install -y --no-install-recommends firefox 
-# clean up after package installations
-  apt-get autoremove -y
-  apt-get clean -y
-  rm -rf /var/lib/apt/lists/*
-EOT
-
-RUN <<EOT
-# install DBeaver from .tar.gz archive (DBeaver PPA is broken)
-  case $(dpkg --print-architecture) in
-    amd64|x86_64) DOWNLOAD_URL="https://github.com/dbeaver/dbeaver/releases/download/${DBEAVER_RELEASE}/dbeaver-ce-${DBEAVER_RELEASE}-linux.gtk.x86_64-nojdk.tar.gz" ;;
-    arm64|aarch64) DOWNLOAD_URL="https://github.com/dbeaver/dbeaver/releases/download/${DBEAVER_RELEASE}/dbeaver-ce-${DBEAVER_RELEASE}-linux.gtk.aarch64-nojdk.tar.gz" ;;
-    *) echo "Unsupported architecture: $(dpkg --print-architecture)" && exit 1 ;;
-  esac
-  wget --progress=dot:giga -O dbeaver.tar.gz "${DOWNLOAD_URL}"
-  tar -xzf /tmp/dbeaver.tar.gz -C /usr/share
-  mv /usr/share/dbeaver /usr/share/dbeaver-ce
-  cp /usr/share/dbeaver-ce/dbeaver-ce.desktop /usr/share/applications/
-#
-EOT
-
-USER user
-WORKDIR /home/user
-
-RUN <<EOT
-# preparare kasmvnc config for user
-  mkdir -p /home/user/.vnc
-  cat > /home/user/.vnc/kasmvnc.yaml <<EOF
-network:
-  protocol: http
-  ssl:
-    require_ssl: false
-  udp:
-    public_ip: 127.0.0.1
-logging:
-  log_writer_name: all
-  log_dest: logfile
-  level: 100
-EOF
-EOT
-
-CMD [ "sleep", "infinity" ]
-
-#TODO: install eclipse+lombok
 
