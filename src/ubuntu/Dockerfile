@@ -22,7 +22,7 @@ ARG NODEJS_DEFAULT_RELEASE="22.17.1"
 
 # GUI tools
 ARG KASMVNC_RELEASE="1.3.4"
-ARG DBEAVER_RELEASE="25.1.4"
+ARG DBEAVER_RELEASE="26.2.2"
 
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
@@ -134,6 +134,13 @@ RUN <<EOT
   git config --global interactive.diffFilter 'delta --color-only'
   git config --global delta.navigate true
   git config --global merge.conflictStyle zdiff3
+# user-global git aliases
+  git config --global alias.co "checkout"
+  git config --global alias.lg "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative"
+  git config --global alias.pcb "push -u origin HEAD"
+  git config --global alias.undo-last-commit "reset --soft HEAD^"
+  git config --global alias.up '!git remote update -p; git merge --ff-only @{u}'
+  git config --global alias.uprebase "rebase --rebase-merges @{u}"
 # starship prompt (https://starship.rs)
   starship config add_newline true
   starship config command_timeout 2000
@@ -176,6 +183,7 @@ FROM base AS ci
 
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
+# hadolint ignore=DL3008
 RUN <<EOT
 # append version and build date to /etc/motd
   cat > /etc/motd <<EOF
@@ -191,7 +199,7 @@ EOF
     docker-ce-cli
 # add specific ghrunner user for github-actions (must have UID 1001!)
 # we do not need to do any special customizations for this user, 
-# because it's home directory will get overridden by the github runner anyways
+# because the home directory will get overridden by the github runner anyways
   useradd --create-home --home /github/home --groups devs,sudo --shell /bin/bash ghrunner --uid 1001;
 # clean up after package installations
   apt-get autoremove -y
@@ -214,7 +222,7 @@ SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 USER root
 WORKDIR /tmp
 
-# hadolint ignore=DL3008
+# hadolint ignore=DL3008,DL3027
 RUN <<EOT
 #!/usr/bin/env /usr/bin/bash
 # append version and build date to /etc/motd
@@ -231,6 +239,7 @@ EOF
     meld
 # install kasm
   wget --progress=dot:giga https://github.com/kasmtech/KasmVNC/releases/download/v${KASMVNC_RELEASE}/kasmvncserver_$(lsb_release -sc)_${KASMVNC_RELEASE}_$(dpkg --print-architecture).deb;
+# use apt to install the package and automatically resolve all needed dependencies
   apt install -y ./kasmvncserver_*.deb;
   rm kasmvncserver_*.deb
 # add user to ssl-certs group
@@ -241,6 +250,7 @@ EOF
   rm -rf /var/lib/apt/lists/*
 EOT
 
+# hadolint ignore=DL3008
 RUN <<EOT
 # install Firefox from PPA (Mozilla Team)
   add-apt-repository ppa:mozillateam/ppa
@@ -259,14 +269,15 @@ EOT
 RUN <<EOT
 # install DBeaver from .tar.gz archive (DBeaver PPA is broken)
   case $(dpkg --print-architecture) in
-    amd64|x86_64) DOWNLOAD_URL="https://github.com/dbeaver/dbeaver/releases/download/${DBEAVER_RELEASE}/dbeaver-ce-${DBEAVER_RELEASE}-linux.gtk.x86_64-nojdk.tar.gz" ;;
-    arm64|aarch64) DOWNLOAD_URL="https://github.com/dbeaver/dbeaver/releases/download/${DBEAVER_RELEASE}/dbeaver-ce-${DBEAVER_RELEASE}-linux.gtk.aarch64-nojdk.tar.gz" ;;
+    amd64|x86_64) DOWNLOAD_URL="https://github.com/dbeaver/dbeaver/releases/download/${DBEAVER_RELEASE}/dbeaver-ce-${DBEAVER_RELEASE}-linux.gtk.x86_64.tar.gz" ;;
+    arm64|aarch64) DOWNLOAD_URL="https://github.com/dbeaver/dbeaver/releases/download/${DBEAVER_RELEASE}/dbeaver-ce-${DBEAVER_RELEASE}-linux.gtk.aarch64.tar.gz" ;;
     *) echo "Unsupported architecture: $(dpkg --print-architecture)" && exit 1 ;;
   esac
   wget --progress=dot:giga -O dbeaver.tar.gz "${DOWNLOAD_URL}"
   tar -xzf /tmp/dbeaver.tar.gz -C /usr/share
   mv /usr/share/dbeaver /usr/share/dbeaver-ce
   cp /usr/share/dbeaver-ce/dbeaver-ce.desktop /usr/share/applications/
+  rm /tmp/dbeaver.tar.gz
 #
 EOT
 
@@ -291,6 +302,3 @@ EOF
 EOT
 
 CMD [ "sleep", "infinity" ]
-
-#TODO: install eclipse+lombok
-
