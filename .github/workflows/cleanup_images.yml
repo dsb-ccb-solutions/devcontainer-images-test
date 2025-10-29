@@ -30,9 +30,7 @@ jobs:
         run: |
           DRYRUN="true"
           FIXREPO="false"
-          # Prüfen, ob der Workflow manuell ausgelöst wurde und das Flag gesetzt ist
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # Wenn der manuelle Input existiert und auf 'false' gesetzt ist
             if [[ "${{ github.event.inputs.dryrun }}" == "false" ]]; then
               DRYRUN="false"
             fi
@@ -49,7 +47,7 @@ jobs:
         id: cleanup
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          packages: devcontainer-images-test/ubuntu,devcontainer-images-test/ubuntu-ci
+          packages: container-images/devcontainer-ubuntu,container-images/ci-ubuntu
           delete-tags: sha-*
           exclude-tags: latest,edge,*.*.*
           older-than: 7 days
@@ -61,7 +59,7 @@ jobs:
         if: ${{ steps.parameters.outputs.FIXREPO == 'true' }}
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          packages: devcontainer-images-test/ubuntu,devcontainer-images-test/ubuntu-ci
+          packages: container-images/devcontainer-ubuntu,container-images/ci-ubuntu
           delete-ghost-images: true
           delete-partial-images: true
           delete-orphaned-images: true

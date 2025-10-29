@@ -11,15 +11,6 @@ ARG \
 ENV \
   LANG="C.UTF-8" 
 
-# set versions of installed packages =========================================
-
-# NodeJS
-# ARG NODEJS_DEFAULT_RELEASE="22.17.1"
-
-# GUI tools
-# ARG KASMVNC_RELEASE="1.3.4"
-# ARG DBEAVER_RELEASE="26.2.2"
-
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
 # hadolint ignore=DL3008
@@ -88,7 +79,7 @@ SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
 RUN <<EOT
 # restore manpages
-yes | unminimize 2>&1
+yes | unminimize || true
 # append version and build date to /etc/motd
  cat > /etc/motd <<EOF
  devcontainer-ubuntu [${CONTAINER_VERSION}], build $(LANG=C.UTF-8 date +%Y-%m-%dT%H:%M:%S%z)

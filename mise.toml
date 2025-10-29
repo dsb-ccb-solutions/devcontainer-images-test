@@ -1,4 +1,2 @@
 [tools]
-act = "latest"
-hadolint = "latest"
-opencode = "latest"
+task = "latest"

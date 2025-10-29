@@ -1,4 +1,11 @@
-name: Ubuntu CI (devcontainer, ci, coder)
+# Build and (conditionally) push ubuntu container images
+#
+# PRs              -> build image only, do not push
+# push to main     -> build and push image with edge + SHA1 tags
+# push version tag -> build and push image with vX.Y.Z, latest, edge + SHA1 tags
+# manual dispatch  -> push image only if push_image=true is selected
+#
+name: Ubuntu images
 
 on:
   pull_request:
@@ -22,7 +29,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ubuntu
   PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
@@ -31,11 +37,10 @@ jobs:
       fail-fast: true
       matrix:
         build_target:
-          - { name: "devcontainer", image_suffix: "" }
-          - { name: "ci", image_suffix: "-ci" }
+          - { name: "devcontainer" }
+          - { name: "ci" }
     runs-on: ubuntu-latest
-    name: ${{matrix.build_target.name}} image
-    environment: build
+    name: ${{ matrix.build_target.name }}-ubuntu
     permissions:
       contents: read
       # allow this workflow to deploy container images/packages
@@ -62,21 +67,21 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}${{ matrix.build_target.image_suffix }}
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.build_target.name }}-ubuntu
           # generate tags for image
-          # - version + "latest" when worflow was triggered via create tag event
+          # - version + "latest" when worflow was triggered via create tag event (release)
           # - 'edge' for the last commit in the active branch
           # - (short) sha commit always
           tags: |
-            type=semver,pattern={{version}},enable=${{ github.event_name == 'create' && github.ref_type == 'tag' }}
-            type=raw,value=latest,enable=${{ github.event_name == 'create' && github.ref_type == 'tag' }}
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
             type=edge
             type=sha
 
       - name: Determine build settings
         id: determine_build_settings
         run: |
-          # set defaults 
+          # set defaults
           VERSION="${{ github.sha }}"
           SHOULD_PUSH="false"
 
@@ -92,10 +97,20 @@ jobs:
           # 2. Creation of o version tag/release => push with version and 'latest' tag (and sha)
           # 3. Manual workflow-dispatch => push only when requested
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]] || \
-             [[ "${{ github.event_name }}" == "create" && "${{ github.ref_type }}" == "tag" ]] || \
+             [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]] || \
              [[ "${{ github.event.inputs.push_image }}" == "true" ]] ; then
             SHOULD_PUSH="true"
           fi
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]] ; then
+            SEMVER_REGEX="^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$"
+            if [[ "${{ github.ref_name }}" =~ $SEMVER_REGEX ]]; then
+              SHOULD_PUSH="true"
+            else
+              echo "❌ ERROR: Tag '${{ github.ref_name }}' is not a valid semver."
+              exit 1
+            fi
+          fi
+
           echo "Determined SHOULD_PUSH: $SHOULD_PUSH"
           echo "SHOULD_PUSH=$SHOULD_PUSH" >> $GITHUB_OUTPUT
 
